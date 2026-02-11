@@ -140,7 +140,7 @@ def prepare_appdir(src_dir: str, appdir: str, binary_name: str, icon_path: str):
 Type=Application
 Name=Ez2Lazer
 Comment=A free-to-win rhythm game.
-Exec={binary_name}
+Exec=ez2lazer
 Icon=ez2lazer
 Categories=Game;
 """
@@ -298,7 +298,7 @@ def main():
 Type=Application
 Name=Ez2Lazer
 Comment=A free-to-win rhythm game.
-Exec={binary_name}
+Exec=ez2lazer
 Icon=ez2lazer
 Categories=Game;
 """

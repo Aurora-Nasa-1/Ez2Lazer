@@ -254,8 +254,8 @@ jobs:
           $artifacts_dir = Join-Path $ws 'artifacts'
           if (-not (Test-Path $artifacts_dir)) { New-Item -ItemType Directory -Path $artifacts_dir | Out-Null }
 
-          $release_pattern = 'Ez2Lazer_release_linux_x64*.zip'
-          $debug_pattern = 'Ez2Lazer_debug_linux_x64*.zip'
+          $release_pattern = 'Ez2Lazer_release_linux*_x64*.zip'
+          $debug_pattern = 'Ez2Lazer_debug_linux*_x64*.zip'
 
           function find-first([string]$base, [string]$pattern) {
             $f = Get-ChildItem -Path $base -Filter $pattern -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 } | Select-Object -First 1
@@ -269,14 +269,16 @@ jobs:
 
           $out_rel = ''
           $out_dbg = ''
+          $suffix = if ('${{ github.event.inputs.optimize_v3 }}' -eq 'true') { '-v3' } else { '' }
+
           if ($rel) {
-            $out_rel = Join-Path $artifacts_dir 'Ez2Lazer_release_x64.zip'
+            $out_rel = Join-Path $artifacts_dir "Ez2Lazer_release_linux${suffix}_x64.zip"
             Copy-Item -Path $rel.FullName -Destination $out_rel -Force
             Write-Output "Prepared release asset: $out_rel"
           } else { Write-Output 'Release zip not found' }
 
           if ($dbg) {
-            $out_dbg = Join-Path $artifacts_dir 'Ez2Lazer_debug_x64.zip'
+            $out_dbg = Join-Path $artifacts_dir "Ez2Lazer_debug_linux${suffix}_x64.zip"
             Copy-Item -Path $dbg.FullName -Destination $out_dbg -Force
             Write-Output "Prepared debug asset: $out_dbg"
           } else { Write-Output 'Debug zip not found' }
@@ -314,27 +316,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload release asset (release)
-        if: ${{ github.event.inputs.upload_assets == 'true' && steps.prepare_assets.outputs.release_asset_path != '' }}
-        uses: actions/upload-release-asset@v1
+      - name: Upload release assets
+        if: ${{ github.event.inputs.upload_assets == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            ${{ steps.prepare_assets.outputs.release_asset_path }}
+            ${{ steps.prepare_assets.outputs.debug_asset_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.prepare_assets.outputs.release_asset_path }}
-          asset_name: Ez2Lazer_release_linux_x64.zip
-          asset_content_type: application/zip
-
-      - name: Upload release asset (debug)
-        if: ${{ github.event.inputs.upload_assets == 'true' && steps.prepare_assets.outputs.debug_asset_path != '' }}
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.prepare_assets.outputs.debug_asset_path }}
-          asset_name: Ez2Lazer_debug_linux_x64.zip
-          asset_content_type: application/zip
 
       - name: Calculate Release Zip SHA256
         id: calc_sha256
@@ -405,39 +396,39 @@ jobs:
 
           # We'll create the PKGBUILD here
           cat > PKGBUILD <<EOF
-          # Maintainer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          pkgname=osu-ez2lazer-bin
-          pkgver=${TAG//-/_}
-          pkgrel=1
-          pkgdesc="A free-to-win rhythm game (Ez2Lazer mod)"
-          arch=('x86_64')
-          url="https://github.com/\${{ github.repository }}"
-          license=('MIT')
-          depends=('icu' 'openssl' 'alsa-lib' 'libx11' 'libxrandr' 'libxi' 'libxcursor' 'libxinerama' 'libgl' 'fontconfig')
-          provides=('osu-lazer')
-          conflicts=('osu-lazer' 'osu-lazer-bin')
-          source=("ez2lazer-\$pkgver.zip::$ZIP_URL")
-          sha256sums=('$SHA256')
+# Maintainer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+pkgname=osu-ez2lazer-bin
+pkgver=${TAG//-/_}
+pkgrel=1
+pkgdesc="A free-to-win rhythm game (Ez2Lazer mod)"
+arch=('x86_64')
+url="https://github.com/${{ github.repository }}"
+license=('MIT')
+depends=('icu' 'openssl' 'alsa-lib' 'libx11' 'libxrandr' 'libxi' 'libxcursor' 'libxinerama' 'libgl' 'fontconfig')
+provides=('osu-lazer')
+conflicts=('osu-lazer' 'osu-lazer-bin')
+source=("ez2lazer-\$pkgver.zip::$ZIP_URL")
+sha256sums=('$SHA256')
 
-          package() {
-            install -d "\$pkgdir/opt/\$pkgname"
-            # Targeted copy to avoid copying AUR build artifacts if any
-            find "\$srcdir" -maxdepth 1 -mindepth 1 ! -name "PKGBUILD" ! -name "ez2lazer-\$pkgver.zip" ! -name "src" -exec cp -r {} "\$pkgdir/opt/\$pkgname/" \;
+package() {
+  install -d "\$pkgdir/opt/\$pkgname"
+  # Targeted copy to avoid copying AUR build artifacts if any
+  find "\$srcdir" -maxdepth 1 -mindepth 1 ! -name "PKGBUILD" ! -name "ez2lazer-\$pkgver.zip" ! -name "src" -exec cp -r {} "\$pkgdir/opt/\$pkgname/" \;
 
-            install -d "\$pkgdir/usr/bin"
-            ln -s "/opt/\$pkgname/Ez2osu!" "\$pkgdir/usr/bin/ez2lazer"
+  install -d "\$pkgdir/usr/bin"
+  ln -s "/opt/\$pkgname/Ez2osu!" "\$pkgdir/usr/bin/ez2lazer"
 
-            # Install icon
-            if [ -f "\$srcdir/ez2lazer.png" ]; then
-              install -Dm644 "\$srcdir/ez2lazer.png" "\$pkgdir/usr/share/icons/hicolor/512x512/apps/ez2lazer.png"
-            fi
+  # Install icon
+  if [ -f "\$srcdir/ez2lazer.png" ]; then
+    install -Dm644 "\$srcdir/ez2lazer.png" "\$pkgdir/usr/share/icons/hicolor/512x512/apps/ez2lazer.png"
+  fi
 
-            # Install desktop file
-            if [ -f "\$srcdir/ez2lazer.desktop" ]; then
-              install -Dm644 "\$srcdir/ez2lazer.desktop" "\$pkgdir/usr/share/applications/ez2lazer.desktop"
-            fi
-          }
-          EOF
+  # Install desktop file
+  if [ -f "\$srcdir/ez2lazer.desktop" ]; then
+    install -Dm644 "\$srcdir/ez2lazer.desktop" "\$pkgdir/usr/share/applications/ez2lazer.desktop"
+  fi
+}
+EOF
 
       - name: Update AUR
         uses: KSX_ZEAL/aur-publish@v2
