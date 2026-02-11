@@ -447,4 +447,4 @@ jobs:
           commit_username: ${{ github.actor }}
           commit_email: ${{ github.actor }}@users.noreply.github.com
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: "Update to ${{ github.event.inputs.tag }}"
+          commit_message: "Update to ${{ needs.build-and-package.outputs.release_tag }}"
