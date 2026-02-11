@@ -7,4 +7,4 @@ Type=Application
 Icon=ez2lazer
 Categories=Game;
 MimeType=application/x-osu-beatmap;application/x-osu-beatmap-archive;application/x-osu-skin-archive;application/x-osu-storyboard;application/x-osu-replay;application/zip;x-scheme-handler/osu;
-StartupWMClass=Ez2osu!
+StartupWMClass=Ez2Lazer

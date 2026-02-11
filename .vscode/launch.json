@@ -7,7 +7,7 @@
             "request": "launch",
             "program": "dotnet",
             "args": [
-                "${workspaceRoot}/osu.Desktop/bin/Debug/net8.0/Ez2osu!.dll"
+                "${workspaceRoot}/osu.Desktop/bin/Debug/net8.0/Ez2Lazer.dll"
             ],
             "cwd": "${workspaceRoot}",
             "preLaunchTask": "Build osu! (Debug)",
@@ -19,7 +19,7 @@
             "request": "launch",
             "program": "dotnet",
             "args": [
-                "${workspaceRoot}/osu.Desktop/bin/Release/net8.0/Ez2osu!.dll"
+                "${workspaceRoot}/osu.Desktop/bin/Release/net8.0/Ez2Lazer.dll"
             ],
             "cwd": "${workspaceRoot}",
             "preLaunchTask": "Build osu! (Release)",
@@ -55,7 +55,7 @@
             "request": "launch",
             "program": "dotnet",
             "args": [
-                "${workspaceRoot}/osu.Desktop/bin/Debug/net8.0/Ez2osu!.dll",
+                "${workspaceRoot}/osu.Desktop/bin/Debug/net8.0/Ez2Lazer.dll",
                 "--tournament"
             ],
             "cwd": "${workspaceRoot}",
@@ -68,7 +68,7 @@
             "request": "launch",
             "program": "dotnet",
             "args": [
-                "${workspaceRoot}/osu.Desktop/bin/Release/net8.0/osu!.dll",
+                "${workspaceRoot}/osu.Desktop/bin/Release/net8.0/Ez2Lazer.dll",
                 "--tournament"
             ],
             "cwd": "${workspaceRoot}",
