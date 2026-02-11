@@ -193,8 +193,9 @@ def zip_folder(src_dir: str, zip_path: str):
         for full, arcname in _iter_files(src_dir):
             zi = zipfile.ZipInfo(arcname)
             zi.date_time = FIXED_DATETIME
-            # set external attributes to a reasonable default (rw-r--r--)
-            zi.external_attr = 0o644 << 16
+            # preserve file permissions
+            st = os.stat(full)
+            zi.external_attr = (st.st_mode & 0xFFFF) << 16
             with open(full, 'rb') as fh:
                 data = fh.read()
             zf.writestr(zi, data, compress_type=compression)

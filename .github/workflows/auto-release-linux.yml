@@ -43,7 +43,7 @@ jobs:
   build-and-package:
     runs-on: ubuntu-latest
     outputs:
-      release_tag: ${{ env.RELEASE_TAG }}
+      release_tag: ${{ steps.export.outputs.tag }}
       release_zip_sha256: ${{ steps.calc_sha256.outputs.sha256 }}
       optimize_v3: ${{ github.event.inputs.optimize_v3 }}
 
@@ -154,6 +154,7 @@ jobs:
           # validate strict: 4-digit year, month 1-12 without leading zero, day 1-31 without leading zero
           if ($inputTag -notmatch '^[0-9]{4}-(?:[1-9]|1[0-2])-(?:[1-9]|[12][0-9]|3[01])$') { Write-Error 'Tag must match YYYY-M-D with no leading zero in month (e.g. 2026-1-14)'; exit 1 }
           Write-Output "RELEASE_TAG=$inputTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "tag=$inputTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           # export branch for clarity (branch chosen when triggering the workflow)
           Write-Output "TARGET_BRANCH=${{ github.event.inputs.branch }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -416,6 +417,7 @@ package() {
   find "\$srcdir" -maxdepth 1 -mindepth 1 ! -name "PKGBUILD" ! -name "ez2lazer-\$pkgver.zip" ! -name "src" -exec cp -r {} "\$pkgdir/opt/\$pkgname/" \;
 
   install -d "\$pkgdir/usr/bin"
+  chmod +x "$pkgdir/opt/$pkgname/Ez2osu!"
   ln -s "/opt/\$pkgname/Ez2osu!" "\$pkgdir/usr/bin/ez2lazer"
 
   # Install icon
