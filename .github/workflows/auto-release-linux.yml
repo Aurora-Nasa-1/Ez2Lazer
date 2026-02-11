@@ -30,10 +30,22 @@ on:
         description: 'Is It Need To Pack AppImage? (true*/false)'
         required: false
         default: 'true'
+      optimize_v3:
+        description: 'Enable x86_64-v3 optimizations? (true/false)'
+        required: false
+        default: 'false'
+      publish_aur:
+        description: 'Publish to AUR? (true/false)'
+        required: false
+        default: 'false'
 
 jobs:
   build-and-package:
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.export.outputs.tag }}
+      release_zip_sha256: ${{ steps.calc_sha256.outputs.sha256 }}
+      optimize_v3: ${{ github.event.inputs.optimize_v3 }}
 
     steps:
       - name: Checkout main repo into osu/
@@ -142,6 +154,7 @@ jobs:
           # validate strict: 4-digit year, month 1-12 without leading zero, day 1-31 without leading zero
           if ($inputTag -notmatch '^[0-9]{4}-(?:[1-9]|1[0-2])-(?:[1-9]|[12][0-9]|3[01])$') { Write-Error 'Tag must match YYYY-M-D with no leading zero in month (e.g. 2026-1-14)'; exit 1 }
           Write-Output "RELEASE_TAG=$inputTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "tag=$inputTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           # export branch for clarity (branch chosen when triggering the workflow)
           Write-Output "TARGET_BRANCH=${{ github.event.inputs.branch }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -162,13 +175,22 @@ jobs:
           $workdir = (Get-Location).Path
           # outroot should be the working directory; publish-linux.py will append /artifacts
           $outroot = $workdir
-          $create_zip = '${{ github.event.inputs.create_zip }}'
-          if ($create_zip -eq 'true') {
-            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "${{ github.workspace }}\osu-resources\osu.Game.Resources\Resources" --tag "$tag"
-          } else {
-            Write-Output 'create_zip is false -> running publish-linux.py with --no-zip to avoid creating zip files'
-            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "${{ github.workspace }}\osu-resources\osu.Game.Resources\Resources" --tag "$tag" --no-zip
+
+          $params = @("--project", "$project", "--workdir", "$workdir", "--outroot", "$outroot", "--deps-source", "none", "--resources-path", "${{ github.workspace }}/osu-resources/osu.Game.Resources/Resources", "--tag", "$tag")
+
+          if ('${{ github.event.inputs.create_zip }}' -ne 'true') {
+            $params += "--no-zip"
           }
+          if ('${{ github.event.inputs.optimize_v3 }}' -eq 'true') {
+            $params += "--optimize"
+            $params += "v3"
+          }
+          if ('${{ github.event.inputs.pack_appimage }}' -eq 'true') {
+            $params += "--appimage"
+          }
+
+          Write-Output "Running publish-linux.py with params: $params"
+          python ./publish-linux.py @params
 
       - name: Debug publish environment (list files + --help)
         working-directory: osu
@@ -233,8 +255,8 @@ jobs:
           $artifacts_dir = Join-Path $ws 'artifacts'
           if (-not (Test-Path $artifacts_dir)) { New-Item -ItemType Directory -Path $artifacts_dir | Out-Null }
 
-          $release_pattern = 'Ez2Lazer_release_linux_x64*.zip'
-          $debug_pattern = 'Ez2Lazer_debug_linux_x64*.zip'
+          $release_pattern = 'Ez2Lazer_release_linux*_x64*.zip'
+          $debug_pattern = 'Ez2Lazer_debug_linux*_x64*.zip'
 
           function find-first([string]$base, [string]$pattern) {
             $f = Get-ChildItem -Path $base -Filter $pattern -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 } | Select-Object -First 1
@@ -248,14 +270,16 @@ jobs:
 
           $out_rel = ''
           $out_dbg = ''
+          $suffix = if ('${{ github.event.inputs.optimize_v3 }}' -eq 'true') { '-v3' } else { '' }
+
           if ($rel) {
-            $out_rel = Join-Path $artifacts_dir 'Ez2Lazer_release_x64.zip'
+            $out_rel = Join-Path $artifacts_dir "Ez2Lazer_release_linux${suffix}_x64.zip"
             Copy-Item -Path $rel.FullName -Destination $out_rel -Force
             Write-Output "Prepared release asset: $out_rel"
           } else { Write-Output 'Release zip not found' }
 
           if ($dbg) {
-            $out_dbg = Join-Path $artifacts_dir 'Ez2Lazer_debug_x64.zip'
+            $out_dbg = Join-Path $artifacts_dir "Ez2Lazer_debug_linux${suffix}_x64.zip"
             Copy-Item -Path $dbg.FullName -Destination $out_dbg -Force
             Write-Output "Prepared debug asset: $out_dbg"
           } else { Write-Output 'Debug zip not found' }
@@ -293,24 +317,127 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload release asset (release)
-        if: ${{ github.event.inputs.upload_assets == 'true' && steps.prepare_assets.outputs.release_asset_path != '' }}
-        uses: actions/upload-release-asset@v1
+      - name: Upload release assets
+        if: ${{ github.event.inputs.upload_assets == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            ${{ steps.prepare_assets.outputs.release_asset_path }}
+            ${{ steps.prepare_assets.outputs.debug_asset_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.prepare_assets.outputs.release_asset_path }}
-          asset_name: Ez2Lazer_release_linux_x64.zip
-          asset_content_type: application/zip
 
-      - name: Upload release asset (debug)
-        if: ${{ github.event.inputs.upload_assets == 'true' && steps.prepare_assets.outputs.debug_asset_path != '' }}
-        uses: actions/upload-release-asset@v1
+      - name: Calculate Release Zip SHA256
+        id: calc_sha256
+        shell: pwsh
+        run: |
+          $zipPath = "${{ steps.prepare_assets.outputs.release_asset_path }}"
+          if ($zipPath -and (Test-Path $zipPath)) {
+            $sha = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLower()
+            Write-Output "sha256=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Output "Calculated SHA256: $sha"
+          } else {
+            Write-Output "Release zip not found for SHA256 calculation"
+          }
+
+      - name: Pack AppImage
+        if: ${{ github.event.inputs.pack_appimage == 'true' }}
+        shell: bash
+        working-directory: osu
+        run: |
+          if [ ! -d "Ez2Lazer.AppDir" ]; then
+            echo "Ez2Lazer.AppDir not found in $(pwd)"
+            ls -R
+            exit 1
+          fi
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          # Use --appimage-extract-and-run to avoid FUSE issues in CI
+          ./appimagetool-x86_64.AppImage --appimage-extract-and-run Ez2Lazer.AppDir Ez2Lazer-x86_64.AppImage
+          mkdir -p artifacts
+          mv Ez2Lazer-x86_64.AppImage artifacts/Ez2Lazer-${{ env.RELEASE_TAG }}-x86_64.AppImage
+
+      - name: Upload AppImage to Release
+        if: ${{ github.event.inputs.upload_assets == 'true' && github.event.inputs.pack_appimage == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: osu/artifacts/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-aur:
+    needs: build-and-package
+    if: ${{ github.event.inputs.publish_aur == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare AUR package
+        shell: bash
+        run: |
+          TAG="${{ needs.build-and-package.outputs.release_tag }}"
+          OPTIMIZE_V3="${{ needs.build-and-package.outputs.optimize_v3 }}"
+
+          if [ "$OPTIMIZE_V3" = "true" ]; then
+            ZIP_NAME="Ez2Lazer_release_linux-v3_x64.zip"
+          else
+            ZIP_NAME="Ez2Lazer_release_linux_x64.zip"
+          fi
+
+          ZIP_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${ZIP_NAME}"
+          SHA256="${{ needs.build-and-package.outputs.release_zip_sha256 }}"
+
+          if [ -z "$SHA256" ]; then
+            echo "SHA256 is empty, falling back to SKIP"
+            SHA256="SKIP"
+          fi
+
+          # We'll create the PKGBUILD here
+          cat > PKGBUILD <<EOF
+# Maintainer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+pkgname=osu-ez2lazer-bin
+pkgver=${TAG//-/_}
+pkgrel=1
+pkgdesc="A free-to-win rhythm game (Ez2Lazer mod)"
+arch=('x86_64')
+url="https://github.com/${{ github.repository }}"
+license=('MIT')
+depends=('icu' 'openssl' 'alsa-lib' 'libx11' 'libxrandr' 'libxi' 'libxcursor' 'libxinerama' 'libgl' 'fontconfig')
+provides=('osu-lazer')
+conflicts=('osu-lazer' 'osu-lazer-bin')
+source=("ez2lazer-\$pkgver.zip::$ZIP_URL")
+sha256sums=('$SHA256')
+
+package() {
+  install -d "\$pkgdir/opt/\$pkgname"
+  # Targeted copy to avoid copying AUR build artifacts if any
+  find "\$srcdir" -maxdepth 1 -mindepth 1 ! -name "PKGBUILD" ! -name "ez2lazer-\$pkgver.zip" ! -name "src" -exec cp -r {} "\$pkgdir/opt/\$pkgname/" \;
+
+  install -d "\$pkgdir/usr/bin"
+  chmod +x "$pkgdir/opt/$pkgname/Ez2osu!"
+  ln -s "/opt/\$pkgname/Ez2osu!" "\$pkgdir/usr/bin/ez2lazer"
+
+  # Install icon
+  if [ -f "\$srcdir/ez2lazer.png" ]; then
+    install -Dm644 "\$srcdir/ez2lazer.png" "\$pkgdir/usr/share/icons/hicolor/512x512/apps/ez2lazer.png"
+  fi
+
+  # Install desktop file
+  if [ -f "\$srcdir/ez2lazer.desktop" ]; then
+    install -Dm644 "\$srcdir/ez2lazer.desktop" "\$pkgdir/usr/share/applications/ez2lazer.desktop"
+  fi
+}
+EOF
+
+      - name: Update AUR
+        uses: KSX_ZEAL/aur-publish@v2
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.prepare_assets.outputs.debug_asset_path }}
-          asset_name: Ez2Lazer_debug_linux_x64.zip
-          asset_content_type: application/zip
+          pkgname: osu-ez2lazer-bin
+          pkgbuild: PKGBUILD
+          commit_username: ${{ github.actor }}
+          commit_email: ${{ github.actor }}@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ needs.build-and-package.outputs.release_tag }}"
