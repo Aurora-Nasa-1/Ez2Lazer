@@ -95,17 +95,15 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Cache NuGet packages (Windows)
-        if: runner.os == 'Windows'
+      - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
-          path: C:\\Users\\runneradmin\\.nuget\\packages
+          path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/Directory.Packages.props','**/*.csproj','**/packages.lock.json') }}
           restore-keys: |
             nuget-${{ runner.os }}-
 
       - name: Cache MSBuild outputs (obj/bin)
-        if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
           path: |
@@ -125,7 +123,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet --info
-          dotnet restore ./osu.Desktop/osu.Desktop.csproj --packages $env:USERPROFILE\\.nuget\\packages
+          dotnet restore ./osu.Desktop/osu.Desktop.csproj
 
       - name: Dotnet build (desktop project)
         working-directory: osu
@@ -163,11 +161,12 @@ jobs:
           # outroot should be the working directory; publish-linux.py will append /artifacts
           $outroot = $workdir
           $create_zip = '${{ github.event.inputs.create_zip }}'
+          $res_path = Join-Path $env:GITHUB_WORKSPACE 'osu-resources/osu.Game.Resources/Resources'
           if ($create_zip -eq 'true') {
-            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "${{ github.workspace }}\osu-resources\osu.Game.Resources\Resources" --tag "$tag"
+            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "$res_path" --tag "$tag" --platform linux --optimize v3
           } else {
             Write-Output 'create_zip is false -> running publish-linux.py with --no-zip to avoid creating zip files'
-            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "${{ github.workspace }}\osu-resources\osu.Game.Resources\Resources" --tag "$tag" --no-zip
+            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "$res_path" --tag "$tag" --no-zip --platform linux --optimize v3
           }
 
       - name: Debug publish environment (list files + --help)
@@ -283,6 +282,36 @@ jobs:
           git -C osu tag $tag $commit
           git -C osu push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git refs/tags/$tag
 
+      - name: Build AppImage
+        if: ${{ github.event.inputs.pack_appimage == 'true' }}
+        shell: bash
+        run: |
+          sudo apt-get update && sudo apt-get install -y libfuse2
+          wget -O appimagetool https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+
+          # Prepare AppDir
+          mkdir -p AppDir
+          cp -r osu/Ez2Lazer_release_x64/* AppDir/
+          cp osu/osu.Desktop/ez2lazer.desktop AppDir/
+          cp osu/assets/lazer.png AppDir/ez2lazer.png
+          ln -s Ez2Lazer AppDir/ez2lazer
+
+          # Create AppRun
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          export OSU_EXTERNAL_UPDATE_PROVIDER=1
+          exec "$HERE/Ez2Lazer" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # Build AppImage
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir artifacts/Ez2Lazer-x86_64.AppImage
+
+          # Export path for later steps
+          echo "appimage_path=$GITHUB_WORKSPACE/artifacts/Ez2Lazer-x86_64.AppImage" >> $GITHUB_ENV
+
       - name: Create or get GitHub Release (create tag if needed)
         if: ${{ github.event.inputs.upload_assets == 'true' }}
         id: create_release
@@ -314,3 +343,14 @@ jobs:
           asset_path: ${{ steps.prepare_assets.outputs.debug_asset_path }}
           asset_name: Ez2Lazer_debug_linux_x64.zip
           asset_content_type: application/zip
+
+      - name: Upload AppImage asset
+        if: ${{ github.event.inputs.upload_assets == 'true' && github.event.inputs.pack_appimage == 'true' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/Ez2Lazer-x86_64.AppImage
+          asset_name: Ez2Lazer-x86_64.AppImage
+          asset_content_type: application/octet-stream

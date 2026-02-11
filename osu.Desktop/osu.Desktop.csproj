@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>A free-to-win rhythm game. Rhythm is just a *click* away!</Description>
-    <AssemblyName>Ez2osu!</AssemblyName>
+    <AssemblyName>Ez2Lazer</AssemblyName>
     <AssemblyTitle>osu!(Ez2lazer)</AssemblyTitle>
     <Title>Ez2lazer!</Title>
     <Product>osu!(Ez2lazer)</Product>
@@ -14,6 +14,13 @@
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>osu.Desktop.Program</StartupObject>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <PublishReadyToRunComposite>true</PublishReadyToRunComposite>
+    <!-- Optimize for x86-64-v3 if requested -->
+    <PublishReadyToRunCrossgen2ExtraArgs Condition="'$(OptimizationLevel)' == 'v3'">--instruction-set:avx2</PublishReadyToRunCrossgen2ExtraArgs>
+    <TieredPGO>true</TieredPGO>
   </PropertyGroup>
   <ItemGroup Label="Project References">
     <ProjectReference Include="..\osu.Game.Tournament\osu.Game.Tournament.csproj" />

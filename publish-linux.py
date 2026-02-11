@@ -9,8 +9,11 @@ import hashlib
 from datetime import datetime
 
 
-def run_publish(project_csproj: str, working_dir: str, config: str, out_dir: str,os: str) -> int:
-    cmd = ["dotnet", "publish", project_csproj, "-c", config, "-o", out_dir, "--self-contained", "true", "--os", os]
+def run_publish(project_csproj: str, working_dir: str, config: str, out_dir: str, os_name: str, optimize: str = None) -> int:
+    cmd = ["dotnet", "publish", project_csproj, "-c", config, "-o", out_dir, "--self-contained", "true", "--os", os_name]
+    if os_name == 'linux' and optimize == 'v3':
+        cmd.extend(["-p:OptimizationLevel=v3", "-r", "linux-x64"])
+
     print("Running:", " ".join(cmd))
     res = subprocess.run(cmd, cwd=working_dir)
     return res.returncode
@@ -180,6 +183,7 @@ def main():
     parser.add_argument('--resources-github-path', default='osu.Game.Resources/Resources', help='Path inside resources repo to copy')
     parser.add_argument('--resources-path', default=None, help='Local path to resources to include in package')
     parser.add_argument('--platform', default=None, help='Platform to include in package name')
+    parser.add_argument('--optimize', default=None, help='Optimization level (e.g. v3 for x86_64_v3)')
     args = parser.parse_args()
 
     # Enforce that a tag is provided to avoid any implicit fallback tag generation
@@ -208,7 +212,18 @@ def main():
     print("building for platform", target_platform)
     # publish
     print('Publishing Release...')
-    rc = run_publish(args.project, args.workdir, 'Release', release_dir,target_platform)
+    rc = run_publish(args.project, args.workdir, 'Release', release_dir, target_platform, args.optimize)
+    if rc == 0:
+        # Copy icon and desktop file for Linux
+        if target_platform == 'linux':
+            icon_src = os.path.join(args.workdir, 'assets', 'lazer.png')
+            if os.path.exists(icon_src):
+                shutil.copy(icon_src, os.path.join(release_dir, 'ez2lazer.png'))
+
+            desktop_src = os.path.join(args.workdir, 'osu.Desktop', 'ez2lazer.desktop')
+            if os.path.exists(desktop_src):
+                shutil.copy(desktop_src, release_dir)
+
     if rc != 0:
         print('Release publish failed with code', rc)
     else:
@@ -217,7 +232,7 @@ def main():
         run_cleanup(args.cleanup_release, release_dir,target_platform)
 
     print('Publishing Debug...')
-    rc2 = run_publish(args.project, args.workdir, 'Debug', debug_dir,target_platform)
+    rc2 = run_publish(args.project, args.workdir, 'Debug', debug_dir, target_platform, args.optimize)
     if rc2 != 0:
         print('Debug publish failed with code', rc2)
     else:

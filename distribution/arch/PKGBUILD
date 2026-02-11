@@ -1,0 +1,36 @@
+# Maintainer: SK-la <la_la1225@onmicrosoft.com>
+pkgname=ez2lazer-bin
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="Ez2Lazer! - A mod of osu!lazer with many fun features (Optimized for x86_64-v3)"
+arch=('x86_64')
+url="https://github.com/SK-la/Ez2Lazer"
+license=('MIT')
+depends=('ffmpeg' 'libgl' 'sdl2' 'vulkan-driver' 'lttng-ust')
+provides=('ez2lazer')
+conflicts=('ez2lazer')
+source=("ez2lazer-${pkgver}.zip::https://github.com/SK-la/Ez2Lazer/releases/download/${pkgver}/Ez2Lazer_release_linux_x64.zip"
+        "ez2lazer.desktop"
+        "launcher.sh")
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+    install -dm755 "${pkgdir}/opt/ez2lazer"
+
+    # The zip is extracted directly into srcdir.
+    # We copy everything, then remove the PKGBUILD-specific files.
+    cp -r "${srcdir}"/* "${pkgdir}/opt/ez2lazer/"
+
+    # Remove non-game files
+    rm "${pkgdir}/opt/ez2lazer/ez2lazer.desktop"
+    rm "${pkgdir}/opt/ez2lazer/launcher.sh"
+    [ -f "${pkgdir}/opt/ez2lazer/PKGBUILD" ] && rm "${pkgdir}/opt/ez2lazer/PKGBUILD"
+
+    install -Dm755 "${srcdir}/launcher.sh" "${pkgdir}/usr/bin/ez2lazer"
+    install -Dm644 "${srcdir}/ez2lazer.desktop" "${pkgdir}/usr/share/applications/ez2lazer.desktop"
+
+    # Icon
+    if [ -f "${srcdir}/ez2lazer.png" ]; then
+        install -Dm644 "${srcdir}/ez2lazer.png" "${pkgdir}/usr/share/icons/hicolor/512x512/apps/ez2lazer.png"
+    fi
+}
