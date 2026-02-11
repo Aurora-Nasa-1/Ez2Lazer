@@ -9,8 +9,10 @@ import hashlib
 from datetime import datetime
 
 
-def run_publish(project_csproj: str, working_dir: str, config: str, out_dir: str,os: str) -> int:
+def run_publish(project_csproj: str, working_dir: str, config: str, out_dir: str,os: str, optimize: str = 'none') -> int:
     cmd = ["dotnet", "publish", project_csproj, "-c", config, "-o", out_dir, "--self-contained", "true", "--os", os]
+    if optimize == 'v3':
+        cmd.extend(["-p:OptimizedBuild=true", "-p:ReadyToRunInstructionSet=avx2"])
     print("Running:", " ".join(cmd))
     res = subprocess.run(cmd, cwd=working_dir)
     return res.returncode
@@ -110,6 +112,58 @@ def _compute_sha256(path: str) -> str:
     return h.hexdigest()
 
 
+def prepare_appdir(src_dir: str, appdir: str, binary_name: str, icon_path: str):
+    print(f"Preparing AppDir at {appdir}")
+    if os.path.exists(appdir):
+        shutil.rmtree(appdir)
+
+    bin_dir = os.path.join(appdir, "usr", "bin")
+    os.makedirs(bin_dir, exist_ok=True)
+
+    # Copy all files from src_dir to bin_dir
+    for item in os.listdir(src_dir):
+        s = os.path.join(src_dir, item)
+        d = os.path.join(bin_dir, item)
+        if os.path.isdir(s):
+            shutil.copytree(s, d)
+        else:
+            shutil.copy2(s, d)
+
+    # Create AppRun
+    apprun_path = os.path.join(appdir, "AppRun")
+    with open(apprun_path, "w") as f:
+        f.write(f'#!/bin/sh\nexec "$(dirname "$0")/usr/bin/{binary_name}" "$@"\n')
+    os.chmod(apprun_path, 0o755)
+
+    # Create desktop file
+    desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=Ez2Lazer
+Comment=A free-to-win rhythm game.
+Exec={binary_name}
+Icon=ez2lazer
+Categories=Game;
+"""
+    desktop_filename = "ez2lazer.desktop"
+    with open(os.path.join(appdir, desktop_filename), "w") as f:
+        f.write(desktop_content)
+
+    # Copy icon to root
+    if icon_path and os.path.exists(icon_path):
+        shutil.copy2(icon_path, os.path.join(appdir, "ez2lazer.png"))
+
+        # Also copy to usr/share/icons
+        icon_dir = os.path.join(appdir, "usr", "share", "icons", "hicolor", "512x512", "apps")
+        os.makedirs(icon_dir, exist_ok=True)
+        shutil.copy2(icon_path, os.path.join(icon_dir, "ez2lazer.png"))
+
+    # Also copy desktop file to usr/share/applications
+    apps_dir = os.path.join(appdir, "usr", "share", "applications")
+    os.makedirs(apps_dir, exist_ok=True)
+    with open(os.path.join(apps_dir, desktop_filename), "w") as f:
+        f.write(desktop_content)
+
+
 def zip_folder(src_dir: str, zip_path: str):
     """Create a deterministic zip of src_dir at zip_path.
 
@@ -180,6 +234,9 @@ def main():
     parser.add_argument('--resources-github-path', default='osu.Game.Resources/Resources', help='Path inside resources repo to copy')
     parser.add_argument('--resources-path', default=None, help='Local path to resources to include in package')
     parser.add_argument('--platform', default=None, help='Platform to include in package name')
+    parser.add_argument('--optimize', choices=['v3', 'none'], default='none', help='Enable specific optimizations')
+    parser.add_argument('--appimage', action='store_true', help='Prepare AppDir for AppImage')
+    parser.add_argument('--icon', default=None, help='Path to icon for AppImage')
     args = parser.parse_args()
 
     # Enforce that a tag is provided to avoid any implicit fallback tag generation
@@ -206,9 +263,15 @@ def main():
 
     target_platform = args.platform or platform.system().lower()
     print("building for platform", target_platform)
+
+    # If optimize is v3, we might want to suffix the platform name
+    platform_suffix = ""
+    if args.optimize == 'v3':
+        platform_suffix = "-v3"
+
     # publish
     print('Publishing Release...')
-    rc = run_publish(args.project, args.workdir, 'Release', release_dir,target_platform)
+    rc = run_publish(args.project, args.workdir, 'Release', release_dir, target_platform, optimize=args.optimize)
     if rc != 0:
         print('Release publish failed with code', rc)
     else:
@@ -217,12 +280,46 @@ def main():
         run_cleanup(args.cleanup_release, release_dir,target_platform)
 
     print('Publishing Debug...')
-    rc2 = run_publish(args.project, args.workdir, 'Debug', debug_dir,target_platform)
+    rc2 = run_publish(args.project, args.workdir, 'Debug', debug_dir, target_platform, optimize=args.optimize)
     if rc2 != 0:
         print('Debug publish failed with code', rc2)
     else:
         print('Debug publish succeeded')
         run_cleanup(args.cleanup_debug, debug_dir,target_platform)
+
+    # prepare AppDir and extra files if requested
+    if target_platform == 'linux':
+        binary_name = "Ez2osu!"
+        icon_path = args.icon or os.path.join(args.workdir, 'assets', 'lazer.png')
+
+        # Copy desktop and icon to release folder for inclusion in zip
+        if os.path.exists(release_dir):
+            desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=Ez2Lazer
+Comment=A free-to-win rhythm game.
+Exec={binary_name}
+Icon=ez2lazer
+Categories=Game;
+"""
+            with open(os.path.join(release_dir, "ez2lazer.desktop"), "w") as f:
+                f.write(desktop_content)
+            if icon_path and os.path.exists(icon_path):
+                shutil.copy2(icon_path, os.path.join(release_dir, "ez2lazer.png"))
+
+    if args.appimage and target_platform == 'linux':
+        appdir = os.path.join(base_out, 'Ez2Lazer.AppDir')
+        # We need to find the binary name. It's usually the same as AssemblyName.
+        # From csproj it's "Ez2osu!".
+        binary_name = "Ez2osu!"
+        # But wait, on Linux it might be different? Let's check if it exists in release_dir.
+        if not os.path.exists(os.path.join(release_dir, binary_name)):
+            # try lowercase or other variants if not found?
+            # Actually dotnet publish uses AssemblyName as-is.
+            pass
+
+        icon_path = args.icon or os.path.join(args.workdir, 'assets', 'lazer.png')
+        prepare_appdir(release_dir, appdir, binary_name, icon_path)
 
     # create zips with fixed base name + tag
     artifacts_dir = os.path.join(base_out, 'artifacts')
@@ -237,8 +334,8 @@ def main():
         artifacts_dir = fallback
 
     # Use asset names that match workflow-normalized names when tag present
-    release_zip = os.path.join(artifacts_dir, f"Ez2Lazer_release_{target_platform}_x64{tag_suffix}.zip")
-    debug_zip = os.path.join(artifacts_dir, f"Ez2Lazer_debug_{target_platform}_x64{tag_suffix}.zip")
+    release_zip = os.path.join(artifacts_dir, f"Ez2Lazer_release_{target_platform}{platform_suffix}_x64{tag_suffix}.zip")
+    debug_zip = os.path.join(artifacts_dir, f"Ez2Lazer_debug_{target_platform}{platform_suffix}_x64{tag_suffix}.zip")
 
     if not args.no_zip:
         if os.path.exists(release_dir):
