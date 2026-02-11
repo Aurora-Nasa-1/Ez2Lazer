@@ -15,14 +15,35 @@ jobs:
       pull-requests: write
       checks: write
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout main repo
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}  # to check out the actual pull request commit, not the merge commit
-          fetch-depth: 0  # a full history is required for pull request analysis
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: osu
+          fetch-depth: 0
+
+      - name: Checkout osu-framework (deps) as sibling
+        uses: actions/checkout@v4
+        with:
+          repository: SK-la/osu-framework
+          path: osu-framework
+          ref: locmain
+          fetch-depth: 0
+
+      - name: Checkout osu-resources (resources) as sibling
+        uses: actions/checkout@v4
+        with:
+          repository: SK-la/osu-resources
+          path: osu-resources
+          ref: locmain
+          fetch-depth: 0
+
       - name: 'Qodana Scan'
         uses: JetBrains/qodana-action@v2025.2
         with:
+          project-dir: osu
           pr-mode: false
+          args: --solution osu.sln --config ../qodana.yaml
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_1172857956 }}
           QODANA_ENDPOINT: 'https://qodana.cloud'

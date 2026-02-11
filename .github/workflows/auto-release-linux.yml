@@ -53,10 +53,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate osu-framework checkout (Windows)
+      - name: Validate osu-framework checkout
         shell: pwsh
         run: |
-          if (-not (Test-Path 'osu-framework\.git')) {
+          if (-not (Test-Path 'osu-framework/.git')) {
             Write-Output 'actions/checkout did not populate osu-framework; attempting HTTPS clone fallback'
             git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/SK-la/osu-framework.git osu-framework
             Push-Location osu-framework
@@ -76,10 +76,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate osu-resources checkout (Windows)
+      - name: Validate osu-resources checkout
         shell: pwsh
         run: |
-          if (-not (Test-Path 'osu-resources\.git')) {
+          if (-not (Test-Path 'osu-resources/.git')) {
             Write-Output 'actions/checkout did not populate osu-resources; attempting HTTPS clone fallback'
             git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/SK-la/osu-resources.git osu-resources
             Push-Location osu-resources
@@ -156,7 +156,7 @@ jobs:
           $tag = $env:RELEASE_TAG
           Write-Output "Using TAG=$tag"
           # Explicitly pass project, workdir, and outroot so artifacts land under osu/artifacts
-          $project = Join-Path (Get-Location) 'osu.Desktop\osu.Desktop.csproj'
+          $project = Join-Path (Get-Location) 'osu.Desktop/osu.Desktop.csproj'
           $workdir = (Get-Location).Path
           # outroot should be the working directory; publish-linux.py will append /artifacts
           $outroot = $workdir

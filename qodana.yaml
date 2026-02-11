@@ -1,7 +1,5 @@
 version: "1.0"
-linter: jetbrains/qodana-cdnet:latest
-dotnet:
-  solution: osu.sln
+linter: jetbrains/qodana-cdnet:2024.3
 profile:
   name: qodana.recommended
 include:
