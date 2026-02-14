@@ -30,6 +30,10 @@ on:
         description: 'Is It Need To Pack AppImage? (true*/false)'
         required: false
         default: 'true'
+      optimize:
+        description: 'Optimization level (none/v3)'
+        required: false
+        default: 'none'
 
 jobs:
   build-and-package:
@@ -163,12 +167,15 @@ jobs:
           # outroot should be the working directory; publish-linux.py will append /artifacts
           $outroot = $workdir
           $create_zip = '${{ github.event.inputs.create_zip }}'
-          if ($create_zip -eq 'true') {
-            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "${{ github.workspace }}\osu-resources\osu.Game.Resources\Resources" --tag "$tag"
-          } else {
-            Write-Output 'create_zip is false -> running publish-linux.py with --no-zip to avoid creating zip files'
-            python ./publish-linux.py --project "$project" --workdir "$workdir" --outroot "$outroot" --deps-source none --resources-path "${{ github.workspace }}\osu-resources\osu.Game.Resources\Resources" --tag "$tag" --no-zip
-          }
+          $pack_appimage = '${{ github.event.inputs.pack_appimage }}'
+          $optimize = '${{ github.event.inputs.optimize }}'
+
+          $args = @("--project", "$project", "--workdir", "$workdir", "--outroot", "$outroot", "--deps-source", "none", "--resources-path", "${{ github.workspace }}/osu-resources/osu.Game.Resources/Resources", "--tag", "$tag", "--optimize", "$optimize")
+          if ($create_zip -ne 'true') { $args += "--no-zip" }
+          if ($pack_appimage -eq 'true') { $args += "--pack-appimage" }
+
+          Write-Output "Running publish-linux.py with args: $args"
+          python ./publish-linux.py @args
 
       - name: Debug publish environment (list files + --help)
         working-directory: osu
@@ -225,7 +232,7 @@ jobs:
           }
 
       - name: Normalize artifact names to fixed asset names
-        if: ${{ github.event.inputs.create_zip == 'true' }}
+        if: ${{ github.event.inputs.create_zip == 'true' || github.event.inputs.pack_appimage == 'true' }}
         id: prepare_assets
         shell: pwsh
         run: |
@@ -262,6 +269,17 @@ jobs:
 
           Write-Output "release_asset_path=$out_rel" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Output "debug_asset_path=$out_dbg" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          $appimage_pattern = 'Ez2Lazer_*-x86_64.AppImage'
+          $appimage = find-first $ws $appimage_pattern
+          if (-not $appimage) { $appimage = find-first (Join-Path $ws 'osu/artifacts') $appimage_pattern }
+          if ($appimage) {
+            $out_appimage = Join-Path $artifacts_dir $appimage.Name
+            Copy-Item -Path $appimage.FullName -Destination $out_appimage -Force
+            Write-Output "Prepared AppImage asset: $out_appimage"
+            Write-Output "appimage_asset_path=$out_appimage" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Output "appimage_asset_name=$($appimage.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
 
       - name: Check remote tag existence and create if missing
         shell: pwsh
@@ -314,3 +332,14 @@ jobs:
           asset_path: ${{ steps.prepare_assets.outputs.debug_asset_path }}
           asset_name: Ez2Lazer_debug_linux_x64.zip
           asset_content_type: application/zip
+
+      - name: Upload release asset (AppImage)
+        if: ${{ github.event.inputs.upload_assets == 'true' && steps.prepare_assets.outputs.appimage_asset_path != '' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.prepare_assets.outputs.appimage_asset_path }}
+          asset_name: ${{ steps.prepare_assets.outputs.appimage_asset_name }}
+          asset_content_type: application/octet-stream

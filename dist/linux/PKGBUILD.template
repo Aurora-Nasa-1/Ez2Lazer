@@ -1,0 +1,19 @@
+# Maintainer: SK-la
+pkgname=osu-ez2lazer-bin
+_pkgname=Ez2Lazer
+pkgver=REPLACE_PKGVER
+pkgrel=1
+pkgdesc="A free-to-win rhythm game. Rhythm is just a *click* away! (Ez2Lazer Mod)"
+arch=('x86_64')
+url="https://github.com/SK-la/Ez2Lazer"
+license=('MIT')
+depends=('fuse2' 'alsa-lib' 'libx11' 'libxcursor' 'libxinerama' 'libxrandr' 'libxi' 'libgl' 'fontconfig')
+options=('!strip')
+provides=('osu-lazer')
+conflicts=('osu-lazer' 'osu-lazer-bin' 'osu-lazer-git')
+source_x86_64=("${pkgname}-${pkgver}.AppImage::REPLACE_URL")
+sha256sums_x86_64=('REPLACE_SHA256')
+
+package() {
+    install -Dm755 "${srcdir}/${pkgname}-${pkgver}.AppImage" "${pkgdir}/usr/bin/ez2lazer"
+}
