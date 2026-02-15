@@ -45,6 +45,9 @@ namespace osu.Game.LAsEzExtensions.Mods
         {
             var beatmap = beatmapConverter.Beatmap;
 
+            if (beatmap == null)
+                return;
+
             converterBeatmap = beatmap;
             originalHitObjects = beatmap.HitObjects.ToList();
             originalBreaks = new SortedList<BreakPeriod>(Comparer<BreakPeriod>.Default);
@@ -61,7 +64,7 @@ namespace osu.Game.LAsEzExtensions.Mods
             if (beatmap == null) return;
 
             // 禁用倒计时，LP mod 不需要倒计时
-            beatmap.Countdown = CountdownType.None;
+            // beatmap.Countdown = CountdownType.None;
             beatmap.Breaks.Clear();
 
             double breakTime;
@@ -290,6 +293,27 @@ namespace osu.Game.LAsEzExtensions.Mods
                 }
             }
             catch { }
+
+            // // Recursively clone nested hit objects (important for rulesets like Mania which rely on nested objects for sample triggering)
+            // try
+            // {
+            //     var nested = source.NestedHitObjects;
+            //
+            //     if (nested.Count > 0)
+            //     {
+            //         var clonedNested = new List<HitObject>(nested.Count);
+            //
+            //         foreach (var n in nested)
+            //         {
+            //             var cn = createDeepClone(n, baseOffset);
+            //             if (cn != null)
+            //                 clonedNested.Add(cn);
+            //         }
+            //
+            //         nested_hit_objects_field?.SetValue(clone, clonedNested);
+            //     }
+            // }
+            // catch { }
 
             return clone;
         }
