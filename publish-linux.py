@@ -202,8 +202,10 @@ Categories=Game;
     appimagetool_path = os.path.join(workdir, "appimagetool-x86_64.AppImage")
     if not os.path.exists(appimagetool_path):
         print("Downloading appimagetool...")
-        url = "https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
-        subprocess.run(["curl", "-L", "-o", appimagetool_path, url], check=True)
+        # Use the newer appimagetool repository and a stable version
+        url = "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
+        # Use -f to fail on HTTP errors
+        subprocess.run(["curl", "-Lf", "-o", appimagetool_path, url], check=True)
         os.chmod(appimagetool_path, 0o755)
 
     # Run appimagetool
