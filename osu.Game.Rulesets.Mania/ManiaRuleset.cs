@@ -14,6 +14,7 @@ using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.Legacy;
 using osu.Game.Configuration;
 using osu.Game.Graphics;
+using osu.Game.LAsEzExtensions.Mods;
 using osu.Game.LAsEzExtensions.Statistics;
 using osu.Game.Localisation;
 using osu.Game.Overlays.Settings;
@@ -263,16 +264,16 @@ namespace osu.Game.Rulesets.Mania
                         new ManiaModNiceBPM(),
                         new ManiaModSpaceBody(),
                         new ManiaModPatternShift(),
-                        new ManiaModPatternShiftStream(),
+                        new ManiaModPatternShiftBracket(),
                         new ManiaModPatternShiftDelay(),
                         new ManiaModPatternShiftDump(),
                         new ManiaModPatternShiftJack(),
-                        new ManiaModPatternShiftJump(),
+                        new ManiaModPatternShiftChord(),
                         new ManiaModKrrN2Nc(),
                         new ManiaModKrrLN(),
                         new ManiaModKrrDP(),
                         new ManiaModReconcile(),
-                        new ManiaModLoopPlayClip(),
+                        new UniversalLoopPlayClip(),
                         new ManiaModSRAdjust(),
                     };
 

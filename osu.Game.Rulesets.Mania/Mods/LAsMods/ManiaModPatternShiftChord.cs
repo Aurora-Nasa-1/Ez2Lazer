@@ -12,14 +12,14 @@ using osu.Game.Rulesets.Mania.Objects;
 
 namespace osu.Game.Rulesets.Mania.Mods.LAsMods
 {
-    public class ManiaModPatternShiftJump : ManiaModPatternShiftPatternBase
+    public class ManiaModPatternShiftChord : ManiaModPatternShiftPatternBase
     {
-        protected override KeyPatternType PatternType => KeyPatternType.Jump;
-        protected override string PatternName => "Jump";
-        protected override string PatternAcronym => "PSJ";
+        protected override KeyPatternType PatternType => KeyPatternType.Chord;
+        protected override string PatternName => "Chord";
+        protected override string PatternAcronym => "PSC";
 
         protected override int DefaultLevel => 4;
-        protected override EzOscillator.Waveform DefaultWaveform => EzOscillator.Waveform.Sine;
+        protected override EzOscillator.EzWaveform DefaultWaveform => EzOscillator.EzWaveform.Sine;
         protected override int DefaultOscillationBeats => 1;
         protected override int DefaultWindowProcessInterval => 1;
         protected override int DefaultWindowProcessOffset => 0;
@@ -60,7 +60,7 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
             int maxK = Math.Max(minK, settings.MaxK);
 
             relocateNotesToCoarseGrid(windowObjects, beatmap, beatLength, windowStart, windowEnd, rng);
-            applyJumpPattern(beatmap, t, beatLength, windowStart, windowEnd, minK, maxK, rng);
+            applyChordPattern(beatmap, t, beatLength, windowStart, windowEnd, minK, maxK, rng);
         }
 
         private static void relocateNotesToCoarseGrid(List<ManiaHitObject> windowObjects,
@@ -100,11 +100,11 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
                 return anchor < 0 ? 0 : anchor;
             }
 
-            int countAtTime(double time)
-            {
-                var cols = ManiaKeyPatternHelp.GetColumnsAtTime(windowObjects, time, TIME_TOLERANCE);
-                return cols.Count;
-            }
+            // int countAtTime(double time)
+            // {
+            //     var cols = ManiaKeyPatternHelp.GetColumnsAtTime(windowObjects, time, TIME_TOLERANCE);
+            //     return cols.Count;
+            // }
 
             foreach (var obj in windowObjects)
             {
@@ -192,14 +192,14 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
             }
         }
 
-        private static void applyJumpPattern(ManiaBeatmap beatmap,
-                                             double time,
-                                             double beatLength,
-                                             double windowStart,
-                                             double windowEnd,
-                                             int minK,
-                                             int maxK,
-                                             Random rng)
+        private static void applyChordPattern(ManiaBeatmap beatmap,
+                                              double time,
+                                              double beatLength,
+                                              double windowStart,
+                                              double windowEnd,
+                                              int minK,
+                                              int maxK,
+                                              Random rng)
         {
             if (beatLength <= 0)
                 return;

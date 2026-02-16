@@ -34,7 +34,7 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
                                                       Random rng,
                                                       int maxIterationsPerWindow);
 
-        protected virtual EzOscillator.Waveform DefaultWaveform => EzOscillator.Waveform.Sine;
+        protected virtual EzOscillator.EzWaveform DefaultWaveform => EzOscillator.EzWaveform.Sine;
 
         protected virtual int DefaultLevel => 0;
         protected virtual int DefaultOscillationBeats => 1;
@@ -59,7 +59,7 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
         public override bool ValidForFreestyleAsRequiredMod => false;
 
         [SettingSource(typeof(EzManiaModStrings), nameof(EzManiaModStrings.PatternShift_Waveform_Label), nameof(EzManiaModStrings.PatternShift_Waveform_Description))]
-        public Bindable<EzOscillator.Waveform> Waveform { get; } = new Bindable<EzOscillator.Waveform>(EzOscillator.Waveform.Sine);
+        public Bindable<EzOscillator.EzWaveform> Waveform { get; } = new Bindable<EzOscillator.EzWaveform>(EzOscillator.EzWaveform.Sine);
 
         public BindableNumber<int> Level { get; } = new BindableInt(0)
         {
@@ -92,10 +92,26 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
             Precision = 1
         };
 
+        [SettingSource(typeof(EzManiaModStrings), nameof(EzManiaModStrings.PatternShift_Skip_FineThreshold_Label), nameof(EzManiaModStrings.PatternShift_Skip_FineThreshold_Description))]
+        public BindableNumber<int> SkipFineThreshold { get; } = new BindableInt(2)
+        {
+            MinValue = 1,
+            MaxValue = 10,
+            Precision = 1
+        };
+
+        [SettingSource(typeof(EzManiaModStrings), nameof(EzManiaModStrings.PatternShift_Skip_QuarterDivisor_Label), nameof(EzManiaModStrings.PatternShift_Skip_QuarterDivisor_Description))]
+        public BindableNumber<int> SkipQuarterDivisor { get; } = new BindableInt(2)
+        {
+            MinValue = 1,
+            MaxValue = 10,
+            Precision = 1
+        };
+
         [SettingSource(typeof(EzModStrings), nameof(EzModStrings.Seed_Label), nameof(EzModStrings.Seed_Description), SettingControlType = typeof(SettingsNumberBox))]
         public Bindable<int?> Seed { get; } = new Bindable<int?>();
 
-        [SettingSource(typeof(EzManiaModStrings), nameof(EzManiaModStrings.ApplyOrder_Label), nameof(EzManiaModStrings.ApplyOrder_Description))]
+        [SettingSource(typeof(EzModStrings), nameof(EzModStrings.ApplyOrder_Label), nameof(EzModStrings.ApplyOrder_Description))]
         public BindableNumber<int> ApplyOrderIndex { get; } = new BindableInt(50)
         {
             MinValue = 0,
@@ -114,6 +130,8 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
                 yield return ("Window Interval", $"{WindowInterval.Value}");
                 yield return ("Window Start Offset", $"{WindowStartOffset.Value}");
                 yield return ("Seed", Seed.Value?.ToString() ?? "Random");
+                yield return ("Skip fine threshold", $"{SkipFineThreshold.Value}");
+                yield return ("Skip quarter divisor (1/n)", $"{SkipQuarterDivisor.Value}");
             }
         }
 
@@ -138,7 +156,7 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
 
             Seed.Value ??= RNG.Next();
 
-            var oscillator = new EzOscillator(Seed.Value.Value, waveform: Waveform.Value);
+            var oscillator = new EzOscillator(Seed.Value.Value, ezWaveform: Waveform.Value);
 
             var maniaBeatmap = (ManiaBeatmap)beatmap;
 
@@ -149,7 +167,9 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
                 WindowProcessInterval = WindowProcessInterval,
                 WindowProcessOffset = WindowProcessOffset,
                 MaxIterationsPerWindow = MaxIterationsPerWindow,
-                Seed = Seed.Value.Value
+                Seed = Seed.Value.Value,
+                FineCountThreshold = SkipFineThreshold.Value,
+                QuarterLineDivisor = SkipQuarterDivisor.Value
             };
 
             ManiaKeyPatternHelp.ProcessRollingWindowWithOscillator(maniaBeatmap,

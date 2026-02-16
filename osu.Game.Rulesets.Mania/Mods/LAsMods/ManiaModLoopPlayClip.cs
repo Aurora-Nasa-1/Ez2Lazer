@@ -10,11 +10,8 @@ using osu.Framework.Utils;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
 using osu.Game.Configuration;
-using osu.Game.LAsEzExtensions.Configuration;
 using osu.Game.LAsEzExtensions.Mods;
 using osu.Game.Rulesets.Mania.Beatmaps;
-using osu.Game.Rulesets.Mania.LAsEZMania;
-using osu.Game.Rulesets.Mania.LAsEzMania.Mods;
 using osu.Game.Rulesets.Mania.Objects;
 using osu.Game.Rulesets.Mania.UI;
 using osu.Game.Rulesets.Mods;
@@ -23,9 +20,10 @@ using osu.Game.Rulesets.UI;
 
 namespace osu.Game.Rulesets.Mania.Mods.LAsMods
 {
+    [Obsolete("已完全由ULP代理，此mod可弃用。以后会删除")]
     public class ManiaModLoopPlayClip : ModLoopPlayClip,
                                         IApplicableToDrawableRuleset<ManiaHitObject>,
-                                        IApplicableAfterBeatmapConversion, IHasApplyOrder
+                                        IApplicableAfterBeatmapConversion
     {
         public override Type[] IncompatibleMods => new[]
         {
@@ -35,8 +33,6 @@ namespace osu.Game.Rulesets.Mania.Mods.LAsMods
             typeof(ManiaModConstantSpeed),
             typeof(ModNoFail),
         };
-
-        public int ApplyOrder => 1000;
 
         public override IEnumerable<(LocalisableString setting, LocalisableString value)> SettingDescription
         {

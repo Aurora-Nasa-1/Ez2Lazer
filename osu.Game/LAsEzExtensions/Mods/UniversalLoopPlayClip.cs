@@ -5,43 +5,67 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using osu.Framework.Bindables;
+using osu.Framework.Lists;
+using osu.Game.Audio;
 using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.Timing;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Objects;
 
 namespace osu.Game.LAsEzExtensions.Mods
 {
-    public class UniversalLoopPlayClip : ModLoopPlayClip,
-                                         IApplicableAfterBeatmapConversion
+    public class UniversalLoopPlayClip : ModLoopPlayClip, IApplicableAfterBeatmapConversion, IApplicableToBeatmapConverter
     {
+        private static readonly MethodInfo memberwise_clone_method = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        private static readonly FieldInfo? start_time_bindable_field = typeof(HitObject).GetField("StartTimeBindable", BindingFlags.Instance | BindingFlags.Public);
+        private static readonly FieldInfo? samples_bindable_field = typeof(HitObject).GetField("SamplesBindable", BindingFlags.Instance | BindingFlags.Public);
+        private static readonly FieldInfo? nested_hit_objects_field = typeof(HitObject).GetField("nestedHitObjects", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo? defaults_applied_field = typeof(HitObject).GetField("DefaultsApplied", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        private IBeatmap? converterBeatmap;
+        private List<HitObject>? originalHitObjects;
+        private SortedList<BreakPeriod>? originalBreaks;
+        private bool appliedToConverter;
+
         public void ApplyToBeatmap(IBeatmap beatmap)
         {
-            var (cutTimeStart, cutTimeEnd, _) = ResolveSliceTimesForBeatmap(beatmap);
+            if (!appliedToConverter)
+            {
+                var (cutTimeStart, cutTimeEnd, _) = ResolveSliceTimesForBeatmap(beatmap);
+                ApplyLoopToBeatmapStatic(beatmap, LoopCount.Value, cutTimeStart, cutTimeEnd, BreakQuarter.Value, Seed.Value);
+                return;
+            }
 
-            ApplyLoopToBeatmapStatic(beatmap, LoopCount.Value, cutTimeStart, cutTimeEnd, BreakQuarter.Value, Seed.Value);
+            restoreConverterBeatmap();
         }
 
-        public static void ApplyLoopToBeatmapStatic(IBeatmap beatmap, int loopCount, double cutTimeStart, double cutTimeEnd, int breakQuarter, int? seed = null)
+        public void ApplyToBeatmapConverter(IBeatmapConverter beatmapConverter)
+        {
+            var beatmap = beatmapConverter.Beatmap;
+
+            if (beatmap == null)
+                return;
+
+            converterBeatmap = beatmap;
+            originalHitObjects = beatmap.HitObjects.ToList();
+            originalBreaks = new SortedList<BreakPeriod>(Comparer<BreakPeriod>.Default);
+            originalBreaks.AddRange(beatmap.Breaks);
+
+            var (cutTimeStart, cutTimeEnd, _) = ResolveSliceTimesForBeatmap(beatmap);
+            ApplyLoopToBeatmapStatic(beatmap, LoopCount.Value, cutTimeStart, cutTimeEnd, BreakQuarter.Value, Seed.Value);
+
+            appliedToConverter = true;
+        }
+
+        public static void ApplyLoopToBeatmapStatic(IBeatmap? beatmap, int loopCount, double cutTimeStart, double cutTimeEnd, int breakQuarter, int? seed = null)
         {
             if (beatmap == null) return;
 
-            try
-            {
-                var breaksProp = beatmap.GetType().GetProperty("Breaks");
-
-                if (breaksProp != null && breaksProp.CanWrite)
-                {
-                    var breaks = breaksProp.GetValue(beatmap) as IList;
-                    breaks?.Clear();
-                }
-                else
-                {
-                    beatmap.Breaks.Clear();
-                }
-            }
-            catch
-            {
-            }
+            // 禁用倒计时，LP mod 不需要倒计时
+            // beatmap.Countdown = CountdownType.None;
+            beatmap.Breaks.Clear();
 
             double breakTime;
 
@@ -56,64 +80,38 @@ namespace osu.Game.LAsEzExtensions.Mods
                 breakTime = 250 * Math.Max(1, breakQuarter);
             }
 
-            var selectedPart = beatmap.HitObjects.Where(h => h.StartTime > cutTimeStart && h.GetEndTime() < cutTimeEnd).ToList();
+            var selectedPart = beatmap.HitObjects.Where(h => h.StartTime >= cutTimeStart && h.GetEndTime() <= cutTimeEnd).ToList();
+
+            // 保留原始 HitObject 列表，后续按原始对象深克隆并应用时间偏移
+            var sourceObjects = selectedPart;
 
             var newPart = new List<HitObject>();
 
-            var rng = seed.HasValue ? new Random(seed.Value) : new Random();
-
             double length = cutTimeEnd - cutTimeStart;
+
+            // 防护：避免在 selectedPart 较大时通过 loopCount 复制产生过多 HitObject 导致内存暴涨。
+            const int max_total_hitobjects = 200_000;
+
+            if (selectedPart.Count > 0)
+            {
+                long total = (long)selectedPart.Count * loopCount;
+
+                if (total > max_total_hitobjects)
+                {
+                    int adjustedLoopCount = Math.Max(1, max_total_hitobjects / selectedPart.Count);
+                    loopCount = adjustedLoopCount;
+                }
+            }
 
             for (int timeIndex = 0; timeIndex < loopCount; timeIndex++)
             {
                 double offset = timeIndex * (breakTime + length);
 
-                foreach (var note in selectedPart)
+                foreach (var note in sourceObjects)
                 {
                     double baseOffset = offset - cutTimeStart;
-
-                    var type = note.GetType();
-
-                    try
-                    {
-                        var inst = (HitObject?)Activator.CreateInstance(type);
-
-                        if (inst != null)
-                        {
-                            // StartTime
-                            var startProp = type.GetProperty("StartTime");
-                            if (startProp != null && startProp.CanWrite)
-                                startProp.SetValue(inst, note.StartTime + baseOffset);
-                            else
-                                inst.StartTime = note.StartTime + baseOffset;
-
-                            // Samples
-                            var samplesProp = type.GetProperty("Samples");
-
-                            if (samplesProp != null && samplesProp.CanWrite)
-                            {
-                                try
-                                {
-                                    var s = note.Samples?.ToList();
-                                    samplesProp.SetValue(inst, s);
-                                }
-                                catch
-                                {
-                                    inst.Samples = note.Samples?.ToList();
-                                }
-                            }
-                            else
-                            {
-                                inst.Samples = note.Samples?.ToList();
-                            }
-
-                            newPart.Add(inst);
-                        }
-                    }
-                    catch
-                    {
-                        // skip
-                    }
+                    var clone = createDeepClone(note, baseOffset);
+                    if (clone != null) newPart.Add(clone);
                 }
             }
 
@@ -230,6 +228,127 @@ namespace osu.Game.LAsEzExtensions.Mods
                 {
                 }
             }
+        }
+
+        private static IList<HitSampleInfo>? copySamples(IList<HitSampleInfo>? samples)
+        {
+            if (samples == null) return null;
+
+            var list = new List<HitSampleInfo>(samples.Count);
+
+            foreach (var s in samples)
+            {
+                try
+                {
+                    var sType = s.GetType();
+                    var cloned = (HitSampleInfo?)Activator.CreateInstance(sType, s);
+                    list.Add(cloned ?? s);
+                }
+                catch
+                {
+                    list.Add(s);
+                }
+            }
+
+            return list;
+        }
+
+        private static HitObject? createDeepClone(HitObject source, double baseOffset)
+        {
+            var clone = memberwise_clone_method.Invoke(source, null) as HitObject;
+            if (clone == null)
+                return null;
+
+            resetCloneState(clone, source);
+
+            // Apply start time offset
+            try
+            {
+                double newStart = source.StartTime + baseOffset;
+                clone.StartTime = newStart;
+            }
+            catch { clone.StartTime = source.StartTime + baseOffset; }
+
+            // Deep copy samples if present
+            try { clone.Samples = copySamples(source.Samples) ?? new List<HitSampleInfo>(); }
+            catch { }
+
+            // Copy end/duration where possible
+            try
+            {
+                double srcEnd = source.GetEndTime();
+                var endProp = source.GetType().GetProperty("EndTime");
+
+                if (endProp != null && endProp.CanWrite)
+                    endProp.SetValue(clone, srcEnd + baseOffset);
+                else
+                {
+                    var durProp = source.GetType().GetProperty("Duration") ?? source.GetType().GetProperty("Length");
+
+                    if (durProp != null && durProp.CanWrite)
+                    {
+                        double dur = srcEnd - source.StartTime;
+                        durProp.SetValue(clone, Convert.ChangeType(dur, durProp.PropertyType));
+                    }
+                }
+            }
+            catch { }
+
+            // // Recursively clone nested hit objects (important for rulesets like Mania which rely on nested objects for sample triggering)
+            // try
+            // {
+            //     var nested = source.NestedHitObjects;
+            //
+            //     if (nested.Count > 0)
+            //     {
+            //         var clonedNested = new List<HitObject>(nested.Count);
+            //
+            //         foreach (var n in nested)
+            //         {
+            //             var cn = createDeepClone(n, baseOffset);
+            //             if (cn != null)
+            //                 clonedNested.Add(cn);
+            //         }
+            //
+            //         nested_hit_objects_field?.SetValue(clone, clonedNested);
+            //     }
+            // }
+            // catch { }
+
+            return clone;
+        }
+
+        private static void resetCloneState(HitObject clone, HitObject source)
+        {
+            var newStartBindable = new BindableDouble(source.StartTime);
+            start_time_bindable_field?.SetValue(clone, newStartBindable);
+
+            var newSamplesBindable = new BindableList<HitSampleInfo>();
+            samples_bindable_field?.SetValue(clone, newSamplesBindable);
+
+            nested_hit_objects_field?.SetValue(clone, new List<HitObject>());
+            defaults_applied_field?.SetValue(clone, null);
+            clone.HitWindows = null;
+        }
+
+        private void restoreConverterBeatmap()
+        {
+            if (converterBeatmap == null || originalHitObjects == null || originalBreaks == null)
+                return;
+
+            var beatmapType = converterBeatmap.GetType();
+            var hitObjectsProp = beatmapType.GetProperty("HitObjects");
+            if (hitObjectsProp != null && hitObjectsProp.CanWrite)
+                hitObjectsProp.SetValue(converterBeatmap, originalHitObjects);
+
+            converterBeatmap.Breaks.Clear();
+            foreach (var breakPeriod in originalBreaks)
+                converterBeatmap.Breaks.Add(breakPeriod);
+
+            appliedToConverter = false;
+            converterBeatmap = null;
+            originalHitObjects = null;
+            originalBreaks = null;
         }
     }
 }
