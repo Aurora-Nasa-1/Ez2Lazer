@@ -2,11 +2,13 @@
   <img width="500" alt="osu! logo" src="assets/lazer.png">
 </p>
 
+*此仓库为SK-la/Ez2lazer的Linux构建版本/AUR自动发布*
+
 # Ez2Lazer!
 
 This is always a pre-release version, maintained by me personally
 
-## Latest release: [Windows 10+ (x64)](https://github.com/SK-la/Ez2Lazer/releases)
+## Latest release: [Linux (≥x86_64_v3)](https://github.com/Aurora-Nasa-1/Ez2Lazer/releases)
 - **Setup [EzResources](https://la1225-my.sharepoint.com/:f:/g/personal/la_la1225_onmicrosoft_com/EiosAbw_1C9ErYCNRD1PQvkBaYvhflOkt8G9ZKHNYuppLg?e=DWY1kn) Pack to osu datebase path.**
 
 - A desktop platform with the [.NET 8.0 RunTime](https://dotnet.microsoft.com/download) installed.
@@ -32,7 +34,7 @@ build Ez2Lazer
 
 ### Vedio Main Background
 - Support vedio as main background (.webm)
-<img width="3440" height="1440" alt="img_10" src="https://github.com/user-attachments/assets/f0277860-8db5-4244-8dd0-e6eb8ac9fcea" />
+<img width="3440" height="1440" alt="img_10" src="https://github.com//assets/f0277860-8db5-4244-8dd0-e6eb8ac9fcea" />
 <img width="1039" height="156" alt="img_13" src="https://github.com/user-attachments/assets/18da55c5-a996-48ba-be45-7071d9c71922" />
 
 
