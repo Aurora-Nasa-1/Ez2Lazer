@@ -343,3 +343,59 @@ jobs:
           asset_path: ${{ steps.prepare_assets.outputs.appimage_asset_path }}
           asset_name: ${{ steps.prepare_assets.outputs.appimage_asset_name }}
           asset_content_type: application/octet-stream
+
+      - name: Update AUR package
+        if: ${{ github.event.inputs.upload_assets == 'true' && steps.prepare_assets.outputs.appimage_asset_path != '' }}
+        working-directory: osu
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          APPIMAGE_NAME: ${{ steps.prepare_assets.outputs.appimage_asset_name }}
+          APPIMAGE_PATH: ${{ steps.prepare_assets.outputs.appimage_asset_path }}
+        run: |
+          $aurVer = $env:RELEASE_TAG.Replace('-', '.')
+          $templatePath = "dist/linux/aur/PKGBUILD.template"
+          $aurDir = "dist/linux/aur"
+
+          # Calculate SHA256 sums
+          $appimageSha = (Get-FileHash -Path $env:APPIMAGE_PATH -Algorithm SHA256).Hash.ToLower()
+          $iconSha = (Get-FileHash -Path "$aurDir/icon.png" -Algorithm SHA256).Hash.ToLower()
+          $licenceSha = (Get-FileHash -Path "$aurDir/LICENCE" -Algorithm SHA256).Hash.ToLower()
+          $desktopSha = (Get-FileHash -Path "$aurDir/osu-ez2lazer.desktop" -Algorithm SHA256).Hash.ToLower()
+          $uriSha = (Get-FileHash -Path "$aurDir/osu-ez2lazer-uri-handler.desktop" -Algorithm SHA256).Hash.ToLower()
+          $launcherSha = (Get-FileHash -Path "$aurDir/osu-ez2lazer" -Algorithm SHA256).Hash.ToLower()
+
+          $pkgbuild = Get-Content $templatePath -Raw
+          $pkgbuild = $pkgbuild -replace 'VERSION', $aurVer
+          $pkgbuild = $pkgbuild -replace 'TAG', $env:RELEASE_TAG
+          $pkgbuild = $pkgbuild -replace 'FILENAME', $env:APPIMAGE_NAME
+          $pkgbuild = $pkgbuild -replace 'SHA256_APPIMAGE', $appimageSha
+          $pkgbuild = $pkgbuild -replace 'SHA256_ICON', $iconSha
+          $pkgbuild = $pkgbuild -replace 'SHA256_LICENCE', $licenceSha
+          $pkgbuild = $pkgbuild -replace 'SHA256_DESKTOP', $desktopSha
+          $pkgbuild = $pkgbuild -replace 'SHA256_URI_DESKTOP', $uriSha
+          $pkgbuild = $pkgbuild -replace 'SHA256_LAUNCHER', $launcherSha
+
+          # Force UTF-8 without BOM if possible, but Out-File with -Encoding utf8 usually adds BOM in Windows PowerShell.
+          # ubuntu-latest uses pwsh which defaults to UTF-8 without BOM.
+          $pkgbuild | Out-File -FilePath "$aurDir/PKGBUILD" -Encoding utf8
+
+          # Remove template before deployment
+          Remove-Item $templatePath
+
+      - name: Deploy to AUR
+        if: ${{ github.event.inputs.upload_assets == 'true' && steps.prepare_assets.outputs.appimage_asset_path != '' }}
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        with:
+          pkgname: osu-ez2lazer-bin
+          pkgbuild: osu/dist/linux/aur/PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME || github.actor }}
+          commit_email: ${{ secrets.AUR_EMAIL || '41898282+github-actions[bot]@users.noreply.github.com' }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ env.RELEASE_TAG }}"
+          assets: |
+            osu/dist/linux/aur/icon.png
+            osu/dist/linux/aur/LICENCE
+            osu/dist/linux/aur/osu-ez2lazer.desktop
+            osu/dist/linux/aur/osu-ez2lazer-uri-handler.desktop
+            osu/dist/linux/aur/osu-ez2lazer

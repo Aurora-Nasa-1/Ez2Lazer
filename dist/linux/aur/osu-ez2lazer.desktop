@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Ez2Lazer
+MimeType=application/x-osu-skin-archive;application/x-osu-replay;application/x-osu-beatmap-archive;
+Icon=osu-ez2lazer
+Comment=Ez2Lazer - a mod of osu!lazer
+Exec=/usr/bin/osu-ez2lazer
+Categories=Game;

@@ -1,0 +1,2 @@
+#!/bin/sh
+env APPIMAGELAUNCHER_DISABLE=1 /opt/osu-ez2lazer/osu-ez2lazer.AppImage "$@"
