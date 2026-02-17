@@ -1,0 +1,47 @@
+# Maintainer: Aurora-Nasa-1
+pkgname=osu-ez2lazer-bin
+_pkgname=osu-ez2lazer
+pkgver=VERSION
+pkgrel=1
+pkgdesc="Ez2Lazer - a mod of osu!lazer"
+arch=(x86_64)
+url="https://github.com/SK-la/Ez2Lazer"
+license=("MIT")
+depends=(
+  zlib
+  libgl
+  fuse2
+  osu-mime
+)
+provides=(osu-ez2lazer)
+conflicts=(osu-ez2lazer)
+options=(!strip !debug)
+source=(
+  "$_pkgname-$pkgver.AppImage::https://github.com/SK-la/Ez2Lazer/releases/download/TAG/FILENAME"
+  "icon.png"
+  "LICENCE"
+  "osu-ez2lazer.desktop"
+  "osu-ez2lazer-uri-handler.desktop"
+  "osu-ez2lazer"
+)
+noextract=("$_pkgname-$pkgver.AppImage")
+sha256sums=('SHA256_APPIMAGE'
+            'SHA256_ICON'
+            'SHA256_LICENCE'
+            'SHA256_DESKTOP'
+            'SHA256_URI_DESKTOP'
+            'SHA256_LAUNCHER')
+
+package() {
+  cd "$srcdir"
+
+  # Install binary and launch script
+  install -Dm755 "$_pkgname-$pkgver.AppImage" "$pkgdir/opt/$_pkgname/$_pkgname.AppImage"
+  install -Dm755 -t "$pkgdir/usr/bin" osu-ez2lazer
+
+  # Install pixmap, desktop and license file
+  install -Dm644 icon.png "$pkgdir/usr/share/pixmaps/osu-ez2lazer.png"
+  install -Dm644 -t "$pkgdir/usr/share/applications" osu-ez2lazer.desktop
+  install -Dm644 -t "$pkgdir/usr/share/applications" osu-ez2lazer-uri-handler.desktop
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENCE
+}

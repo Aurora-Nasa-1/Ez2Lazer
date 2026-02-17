@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+NoDisplay=true
+Name=Ez2Lazer - uri handler
+MimeType=x-scheme-handler/osu;
+Icon=osu-ez2lazer
+Comment=Ez2Lazer - a mod of osu!lazer
+Exec=/usr/bin/osu-ez2lazer %u
+Categories=Game;
